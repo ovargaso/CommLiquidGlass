@@ -18,6 +18,7 @@ struct ContentView: View {
 
 struct DashboardView: View {
     @State private var isSidebarOpen = false
+    @State private var selectedSort = "High Priority to Low"
     
     var body: some View {
         ZStack(alignment: .leading) {
@@ -25,7 +26,7 @@ struct DashboardView: View {
             VStack(spacing: 16) {
                 HeaderView(isSidebarOpen: $isSidebarOpen)
                 
-                PriorityPicker()
+                PriorityPicker(selectedSort: $selectedSort)
                 
                 ScrollView {
                     LazyVStack(spacing: 16) {
