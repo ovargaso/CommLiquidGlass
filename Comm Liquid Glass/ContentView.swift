@@ -20,12 +20,28 @@ struct DashboardView: View {
     @State private var isSidebarOpen = false
     @State private var selectedSort = "High Priority to Low"
     @State private var expandedCardIndex: Int? = nil
+    @State private var isSearchFieldFocused = false
+    @StateObject private var searchManager = SearchManager()
     
     var body: some View {
         ZStack(alignment: .leading) {
+            // Background tap to dismiss search
+            if isSearchFieldFocused {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture {
+
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isSearchFieldFocused = false
+                        }
+                    }
+                    .zIndex(-1) // Behind everything
+            }
+            
             // Main content
             VStack(spacing: 16) {
-                HeaderView(isSidebarOpen: $isSidebarOpen)
+                HeaderView(isSidebarOpen: $isSidebarOpen, searchManager: searchManager, isSearchFieldFocused: $isSearchFieldFocused)
                 
                 PriorityPicker(selectedSort: $selectedSort)
                 

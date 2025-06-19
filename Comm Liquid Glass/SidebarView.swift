@@ -106,7 +106,7 @@ struct SidebarView: View {
             HStack {
                 Spacer()
                 Button {
-                    print("🔴 X button DEFINITELY tapped - closing sidebar now!") // Enhanced debug
+        
                     withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                         isSidebarOpen = false
                     }
