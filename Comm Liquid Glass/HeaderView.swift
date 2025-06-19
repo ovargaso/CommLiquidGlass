@@ -136,11 +136,11 @@ struct HeaderView: View {
                         ))
                                         }
                     
-                    // Enhanced Search Bar with Liquid Glass Effects + Pill-Internal X Button
-                ZStack(alignment: .leading) {
+                    // Enhanced Search Bar with External X Button Overlays
+                ZStack {
                     searchBarContainer
                     
-                    // SOLUTION: X button positioned precisely inside the pill area
+                    // PILL X BUTTON: Positioned precisely inside the pill area
                     if let selectedPill = searchManager.selectedPill {
                         GeometryReader { geometry in
                             HStack(spacing: 0) {
@@ -161,7 +161,6 @@ struct HeaderView: View {
                                     .frame(width: xPosition)
                                 
                                 Button {
-                                    print("✅ PILL INTERNAL X BUTTON - Pill removed successfully!")
                                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                                     impactFeedback.impactOccurred()
                                     
@@ -192,6 +191,43 @@ struct HeaderView: View {
                                 Spacer()
                             }
                         }
+                        .frame(height: 44) // Match search bar height
+                    }
+                    
+                    // GREY X BUTTON: Positioned at far right outside gesture-blocking container
+                    if !searchManager.searchText.isEmpty || searchManager.selectedPill != nil {
+                        HStack {
+                            Spacer() // Push to far right
+                            
+                            Button {
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                impactFeedback.impactOccurred()
+                                
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    // Clear everything - this is the main search field X button
+                                    searchManager.clearSearch()
+                                    searchManager.selectedPill = nil
+                                    // Keep search field focused so suggestions reappear
+                                    isSearchFieldFocused = true
+                                    fieldIsFocused = true
+                                }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .background(
+                                        Circle()
+                                            .fill(.ultraThinMaterial)
+                                            .frame(width: 24, height: 24)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .scale.combined(with: .opacity)
+                            ))
+                        }
+                        .padding(.trailing, 16) // Match container's horizontal padding
                         .frame(height: 44) // Match search bar height
                     }
                 }
@@ -300,35 +336,7 @@ struct HeaderView: View {
                 Spacer()
             }
         
-            // Clear Button with Glass Effect - Main search field X (should clear everything)
-            if !searchManager.searchText.isEmpty || searchManager.selectedPill != nil {
-          Button {
-                    print("🟡 MAIN SEARCH X BUTTON TAPPED")
-                    print("🟡 BEFORE: searchText = '\(searchManager.searchText)', selectedPill = '\(searchManager.selectedPill ?? "nil")'")
-                    
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        // Clear everything - this is the main search field X button
-                        searchManager.clearSearch()
-                        searchManager.selectedPill = nil
-                        isSearchFieldFocused = false
-                        fieldIsFocused = false
-                        print("🟡 EVERYTHING CLEARED - main search X should clear all")
-                    }
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
-                        .background(
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                                .frame(width: 24, height: 24)
-                        )
-                }
-                .transition(.asymmetric(
-                    insertion: .scale.combined(with: .opacity),
-                    removal: .scale.combined(with: .opacity)
-                ))
-            }
+
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -520,19 +528,12 @@ struct HeaderView: View {
         .zIndex(1000) // Higher than other content
     }
     
-    // MARK: - Selected Pill View (in search bar) - UNUSED IN CURRENT TEST
-    // Keeping for reference but not currently used
-    @ViewBuilder
-    private func selectedPillView(_ text: String) -> some View {
-        Text("Unused in current test")
-     }
+
      
      // MARK: - Suggestion Pill
     @ViewBuilder
     private func suggestionPill(_ text: String) -> some View {
         Button {
-            print("🟦 SUGGESTION PILL TAPPED: '\(text)'")
-            
             // Add haptic feedback for consistency
             let impactFeedback = UIImpactFeedbackGenerator(style: .light)
             impactFeedback.impactOccurred()
@@ -543,7 +544,6 @@ struct HeaderView: View {
                 // Keep focus active so cursor appears
                 isSearchFieldFocused = true
                 fieldIsFocused = true
-                print("🟦 PILL CREATED: '\(text)' - Focus maintained")
             }
         } label: {
             HStack(spacing: 6) {

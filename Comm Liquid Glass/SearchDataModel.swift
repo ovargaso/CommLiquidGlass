@@ -359,11 +359,7 @@ class SearchManager: ObservableObject {
         selectedPill = nil // Clear pill when clearing search
     }
     
-    // TESTING: Add dedicated pill management
-    func clearPill() {
-        selectedPill = nil
-        print("🧪 SearchManager.clearPill() called")
-    }
+
     
     // MARK: - Smart Search Suggestions
     
