@@ -19,6 +19,7 @@ struct ContentView: View {
 struct DashboardView: View {
     @State private var isSidebarOpen = false
     @State private var selectedSort = "High Priority to Low"
+    @State private var expandedCardIndex: Int? = nil
     
     var body: some View {
         ZStack(alignment: .leading) {
@@ -30,7 +31,7 @@ struct DashboardView: View {
                 
                 ScrollView {
                     LazyVStack(spacing: 16) {
-                        MessageCardView(
+                        StackableMessageCardView(
                             platformIcon: "bubble.left.and.bubble.right.fill",
                             senders: "Vincent Chase, Eric Murphy",
                             timestamp: "20 mins ago",
@@ -44,7 +45,7 @@ struct DashboardView: View {
                             ]
                         )
                         
-                        MessageCardView(
+                        StackableMessageCardView(
                             platformIcon: "bubble.left.and.bubble.right.fill",
                             senders: "Team Marketing",
                             timestamp: "1 hour ago",
@@ -57,7 +58,7 @@ struct DashboardView: View {
                             ]
                         )
                         
-                        MessageCardView(
+                        StackableMessageCardView(
                             platformIcon: "bubble.left.and.bubble.right.fill",
                             senders: "Sarah Johnson",
                             timestamp: "2 hours ago",

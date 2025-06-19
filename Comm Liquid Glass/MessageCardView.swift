@@ -210,6 +210,8 @@ struct UrgencyMenu: View {
   @Binding var selectedUrgency: String
   @Binding var isPresented: Bool
   
+  @State private var hoveredUrgency: String? = nil
+  
   private var reclassificationOptions: [(title: String, urgency: String)] {
     switch currentUrgency {
     case "High":
@@ -233,7 +235,7 @@ struct UrgencyMenu: View {
   }
   
   var body: some View {
-    VStack(spacing: 8) {
+    VStack(spacing: 4) {
       ForEach(reclassificationOptions, id: \.urgency) { option in
         Button(action: {
           withAnimation(.easeInOut(duration: 0.3)) {
@@ -245,17 +247,32 @@ struct UrgencyMenu: View {
             Text(option.title)
               .font(.body)
               .foregroundColor(.white)
+              .lineLimit(1)
+              .fixedSize(horizontal: true, vertical: false)
             Spacer()
           }
-          .padding(.horizontal, 16)
-          .padding(.vertical, 12)
-          .background(.ultraThinMaterial)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
+          .background(
+            Group {
+              #if os(macOS)
+              hoveredUrgency == option.urgency ? Color.white.opacity(0.12) : Color.clear
+              #else
+              Color.clear
+              #endif
+            }
+          )
           .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(PlainButtonStyle())
+        #if os(macOS)
+        .onHover { hovering in
+          hoveredUrgency = hovering ? option.urgency : nil
+        }
+        #endif
       }
     }
-    .padding(12)
+    .padding(8)
     .background(.regularMaterial)
     .clipShape(RoundedRectangle(cornerRadius: 12))
     .overlay(
@@ -269,370 +286,419 @@ struct UrgencyMenu: View {
   }
 }
 
-struct MessageCardView: View {
-  let platformIcon: String
-  let senders: String
-  let timestamp: String
-  let urgency: String
-  let summary: String
-  let actionItems: [String]
-  
-  @State private var isExpanded = false
-  @State private var isThreadExpanded = false
-  @State private var showFullConversation = false
-  @State private var selectedUrgency: String
-  @State private var showUrgencyMenu = false
-  
-  // Initialize selectedUrgency with the passed urgency value
-  init(platformIcon: String, senders: String, timestamp: String, urgency: String, summary: String, actionItems: [String]) {
-    self.platformIcon = platformIcon
-    self.senders = senders
-    self.timestamp = timestamp
-    self.urgency = urgency
-    self.summary = summary
-    self.actionItems = actionItems
-    self._selectedUrgency = State(initialValue: urgency)
-  }
-  
-  // Sample thread messages
-  private let threadMessages = [
-    ThreadMessage(
-      sender: "Vincent Chase",
-      initials: "VC",
-      content: "Lorem ipsum dolor sit amet consectetur. Venenatis convallis eu semper volutpat. Scelerisque dapibus platea laoreet eget tristique.",
-      timestamp: "2m ago"
-    ),
-    ThreadMessage(
-      sender: "Eric Murphy",
-      initials: "EM",
-      content: "Lorem ipsum dolor sit amet consectetur. Venenatis convallis eu semper volutpat. Scelerisque dapibus platea laoreet eget tristique.",
-      timestamp: "2m ago"
-    ),
-    ThreadMessage(
-      sender: "Vincent Chase",
-      initials: "VC",
-      content: "Lorem ipsum dolor sit amet consectetur. Venenatis convallis eu semper volutpat. Scelerisque dapibus platea laoreet eget tristique.",
-      timestamp: "2m ago"
-    ),
-    ThreadMessage(
-      sender: "Eric Murphy",
-      initials: "EM",
-      content: "Lorem ipsum dolor sit amet consectetur. Venenatis convallis eu semper volutpat. Scelerisque dapibus platea laoreet eget tristique.",
-      timestamp: "2m ago"
-    )
-  ]
-  
-  var body: some View {
-    // Use ZStack for proper layering control
-    ZStack(alignment: .top) {
-      
-      // LAYER 1 (BEHIND): Expanded thread view - renders first, appears behind
-      if isThreadExpanded {
-        VStack(spacing: 0) {
-          // Add top padding to account for parent card height
-          Spacer()
-            .frame(height: 180) // Approximate parent card height
-          
-          // Thread messages
-          VStack(alignment: .leading, spacing: 16) {
-            ForEach(threadMessages.prefix(4)) { message in
-              ThreadMessageRow(message: message)
-            }
-          }
-          .padding(.horizontal, 16)
-          .padding(.bottom, 16)
-          .padding(.top, 16)
-          .background(.regularMaterial)
-          
-          // Reply interface
-          ReplyInterface()
-            .background(.regularMaterial)
-          
-          // See More button
-          HStack {
-            Spacer()
-            
-            Button(action: {
-              showFullConversation = true
-            }) {
-              Text("See more")
-                .font(.body)
-                .foregroundColor(.blue)
-            }
-            
-            Spacer()
-          }
-          .padding(.vertical, 16)
-          .background(.regularMaterial)
-        }
-        .clipShape(BottomRoundedRectangle(radius: 16))
-        .transition(.asymmetric(
-          insertion: .move(edge: .top).combined(with: .opacity),
-          removal: .move(edge: .top).combined(with: .opacity)
-        ))
-      }
-      
-      // LAYER 2 (ON TOP): Parent card - renders second, appears on top
-      VStack(spacing: 0) {
-        ZStack(alignment: .top) {
-          // Back card (peek effect) - only visible when not thread expanded
-          if !isThreadExpanded {
-            VStack(alignment: .leading, spacing: 12) {
-              // Header Row
-              HStack(alignment: .top, spacing: 12) {
-                Image(systemName: platformIcon)
-                  .foregroundColor(.clear)
-                  .font(.title3)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(senders)
-                    .font(.headline)
-                    .foregroundColor(.clear)
-                  
-                  Text("Last message received: \(timestamp)")
-                    .font(.caption)
-                    .foregroundColor(.clear)
-                }
-                
-                Spacer()
-                
-                // Urgency Badge with Menu
-                Button(action: {
-                  withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    showUrgencyMenu.toggle()
-                  }
-                }) {
-                  HStack(spacing: 4) {
-                    Text(selectedUrgency)
-                      .font(.subheadline)
-                      .foregroundColor(selectedUrgency == "High" ? .red : selectedUrgency == "Medium" ? .orange : .yellow)
-                    
-                    Image(systemName: "chevron.down")
-                      .font(.caption)
-                      .foregroundColor(.white.opacity(0.7))
-                      .rotationEffect(.degrees(showUrgencyMenu ? 180 : 0))
-                  }
-                  .padding(.horizontal, 12)
-                  .padding(.vertical, 6)
-                  .background(.ultraThinMaterial)
-                  .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(PlainButtonStyle())
-              }
-              
-              // Summary Text (invisible)
-              Text(summary)
-                .font(.callout)
-                .foregroundColor(.clear)
-                .lineLimit(6)
-                .truncationMode(.tail)
-                .padding(.leading, 44)
-              
-              // Separator (invisible)
-              Divider()
-                .background(Color.clear)
-                .padding(.leading, 44)
-              
-              // Action Items Row (invisible)
-              ZStack(alignment: .leading) {
-                Image(systemName: "chevron.down")
-                  .font(.caption)
-                  .foregroundColor(.clear)
-                
-                HStack {
-                  Text("Action Items")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.clear)
-                  
-                  Spacer()
-                }
-                .padding(.leading, 44)
-              }
+// Shared card content for stackable cards
+struct MessageCardContent: View {
+    let platformIcon: String
+    let senders: String
+    let timestamp: String
+    let urgency: String
+    let summary: String
+    let actionItems: [String]
+    let isExpanded: Bool
+    let isThreadExpanded: Bool
+    let selectedUrgency: String
+    let showUrgencyMenu: Bool
+    let showShadow: Bool
+    let onToggleExpand: () -> Void
+    let onToggleUrgencyMenu: () -> Void
+    let onEllipsis: () -> Void
 
-              if isExpanded {
-                VStack(alignment: .leading, spacing: 6) {
-                  ForEach(actionItems, id: \.self) { item in
-                    Text("• \(item)")
-                      .font(.body)
-                      .foregroundColor(.clear)
-                  }
-                }
-                .padding(.top, 4)
-                .padding(.leading, 44)
-              }
-              
-              // Ellipsis Button (invisible)
-              HStack {
-                Spacer()
-                
-                Image(systemName: "ellipsis")
-                  .foregroundColor(.clear)
-                  .font(.title3)
-              }
-            }
-            .padding(16)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .scaleEffect(0.96)
-            .offset(y: 14)
-            .opacity(0.3)
-          }
-          
-          // Front card with drop shadow - FLOATS ON TOP
-          Button(action: {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-              isThreadExpanded.toggle()
-            }
-          }) {
-            VStack(alignment: .leading, spacing: 12) {
-              // Header Row
-              HStack(alignment: .top, spacing: 12) {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header Row
+            HStack(alignment: .top, spacing: 12) {
                 Image(systemName: platformIcon)
-                  .foregroundColor(.white)
-                  .font(.title3)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(senders)
-                    .font(.headline)
                     .foregroundColor(.white)
-                  
-                  Text("Last message received: \(timestamp)")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(senders)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Text("Last message received: \(timestamp)")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
                 }
-                
                 Spacer()
-                
                 // Urgency Badge with Menu
-                Button(action: {
-                  withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    showUrgencyMenu.toggle()
-                  }
-                }) {
-                  HStack(spacing: 4) {
-                    Text(selectedUrgency)
-                      .font(.subheadline)
-                      .foregroundColor(selectedUrgency == "High" ? .red : selectedUrgency == "Medium" ? .orange : .yellow)
-                    
-                    Image(systemName: "chevron.down")
-                      .font(.caption)
-                      .foregroundColor(.white.opacity(0.7))
-                      .rotationEffect(.degrees(showUrgencyMenu ? 180 : 0))
-                  }
-                  .padding(.horizontal, 12)
-                  .padding(.vertical, 6)
-                  .background(.ultraThinMaterial)
-                  .clipShape(RoundedRectangle(cornerRadius: 8))
+                Button(action: onToggleUrgencyMenu) {
+                    HStack(spacing: 4) {
+                        Text(selectedUrgency)
+                            .font(.subheadline)
+                            .foregroundColor(selectedUrgency == "High" ? .red : selectedUrgency == "Medium" ? .orange : .yellow)
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                            .rotationEffect(.degrees(showUrgencyMenu ? 180 : 0))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(PlainButtonStyle())
-              }
-              
-              // Summary Text
-              Text(summary)
+            }
+            // Summary Text
+            Text(summary)
                 .font(.callout)
                 .foregroundColor(.white)
                 .lineLimit(isThreadExpanded ? nil : 6)
                 .truncationMode(.tail)
                 .padding(.leading, 44)
-              
-              // Separator
-              Divider()
+            // Separator
+            Divider()
                 .background(Color.white.opacity(0.3))
                 .padding(.leading, 44)
-              
-              // Action Items Row
-              ZStack(alignment: .leading) {
-                Button(action: {
-                  withAnimation(.easeInOut(duration: 0.3)) {
-                    isExpanded.toggle()
-                  }
-                }) {
-                  Image(systemName: "chevron.down")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.7))
-                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+            // Action Items Row
+            ZStack(alignment: .leading) {
+                Button(action: onToggleExpand) {
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
-                
                 HStack {
-                  Text("Action Items")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                  
-                  Spacer()
+                    Text("Action Items")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                    Spacer()
                 }
                 .padding(.leading, 44)
-              }
-              
-              if isExpanded {
+            }
+            if isExpanded {
                 VStack(alignment: .leading, spacing: 6) {
-                  ForEach(actionItems, id: \.self) { item in
-                    Text("• \(item)")
-                      .font(.body)
-                      .foregroundColor(.white.opacity(0.9))
-                  }
+                    ForEach(actionItems, id: \.self) { item in
+                        Text("• \(item)")
+                            .font(.body)
+                            .foregroundColor(.white.opacity(0.9))
+                    }
                 }
                 .padding(.top, 4)
                 .padding(.leading, 44)
-              }
-              
-              // Ellipsis Button
-              HStack {
-                Spacer()
-                
-                Button(action: {}) {
-                  Image(systemName: "ellipsis")
-                    .foregroundColor(.white)
-                    .font(.title3)
-                }
-              }
             }
-            .padding(16)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
-          }
-          .buttonStyle(PlainButtonStyle())
-        }
-      }
-    }
-    .animation(.easeInOut(duration: 0.3), value: isExpanded)
-    .overlay(
-      // Floating urgency menu overlay
-      Group {
-        if showUrgencyMenu {
-          VStack {
+            // Ellipsis Button
             HStack {
-              Spacer()
-              UrgencyMenu(
-                currentUrgency: selectedUrgency,
-                selectedUrgency: $selectedUrgency,
-                isPresented: $showUrgencyMenu
-              )
-              .frame(width: 180)
-              .offset(x: -8, y: 0) // Fine-tune positioning to align with badge
+                Spacer()
+                Button(action: onEllipsis) {
+                    Image(systemName: "ellipsis")
+                        .foregroundColor(.white)
+                        .font(.title3)
+                }
             }
-            .padding(.top, 48) // Adjust to align with badge
-            .padding(.trailing, 16)
-            Spacer()
-          }
         }
-      }
-    )
-    .fullScreenCover(isPresented: $showFullConversation) {
-      ConversationView(
-        conversationTitle: "Budget Discussion",
-        participants: senders.components(separatedBy: ", "),
-        isPresented: $showFullConversation
-      )
+        .padding(16)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: showShadow ? Color.black.opacity(0.3) : Color.clear, radius: showShadow ? 8 : 0, x: 0, y: showShadow ? 4 : 0)
     }
-  }
+}
+
+// New stackable card view that uses the two-card ZStack approach
+struct StackableMessageCardView: View {
+    let platformIcon: String
+    let senders: String
+    let timestamp: String
+    let urgency: String
+    let summary: String
+    let actionItems: [String]
+    
+    @State private var isExpanded = false
+    @State private var isThreadExpanded = false
+    @State private var showFullConversation = false
+    @State private var selectedUrgency: String
+    @State private var showUrgencyMenu = false
+    @State private var cardHeight: CGFloat = 0
+    
+    // Initialize selectedUrgency with the passed urgency value
+    init(platformIcon: String, senders: String, timestamp: String, urgency: String, summary: String, actionItems: [String]) {
+        self.platformIcon = platformIcon
+        self.senders = senders
+        self.timestamp = timestamp
+        self.urgency = urgency
+        self.summary = summary
+        self.actionItems = actionItems
+        self._selectedUrgency = State(initialValue: urgency)
+    }
+    
+    var body: some View {
+        ZStack(alignment: .top) {
+            // BACK CARD - always rendered, with animated offset, NO SHADOW
+            MessageCardContent(
+                platformIcon: platformIcon,
+                senders: senders,
+                timestamp: timestamp,
+                urgency: urgency,
+                summary: summary,
+                actionItems: actionItems,
+                isExpanded: isExpanded,
+                isThreadExpanded: isThreadExpanded,
+                selectedUrgency: selectedUrgency,
+                showUrgencyMenu: false, // Back card doesn't show menu
+                showShadow: false, // NO SHADOW for back card
+                onToggleExpand: {}, // Back card doesn't handle interactions
+                onToggleUrgencyMenu: {},
+                onEllipsis: {}
+            )
+            .scaleEffect(0.96)
+            .offset(y: isThreadExpanded ? cardHeight : 14)
+            .opacity(0.3)
+            .mask(
+                Rectangle()
+                    .offset(y: isThreadExpanded ? 0 : cardHeight - 14) // Hide top when collapsed, show all when expanded
+            )
+            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: isThreadExpanded)
+            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: cardHeight)
+            
+            // FRONT CARD - tappable, with height measurement
+            Button(action: {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    isThreadExpanded.toggle()
+                }
+            }) {
+                MessageCardContent(
+                    platformIcon: platformIcon,
+                    senders: senders,
+                    timestamp: timestamp,
+                    urgency: urgency,
+                    summary: summary,
+                    actionItems: actionItems,
+                    isExpanded: isExpanded,
+                    isThreadExpanded: isThreadExpanded,
+                    selectedUrgency: selectedUrgency,
+                    showUrgencyMenu: showUrgencyMenu,
+                    showShadow: true, // SHADOW for front card
+                    onToggleExpand: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isExpanded.toggle()
+                        }
+                    },
+                    onToggleUrgencyMenu: {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showUrgencyMenu.toggle()
+                        }
+                    },
+                    onEllipsis: {}
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear {
+                            cardHeight = geo.size.height
+                        }
+                        .onChange(of: geo.size.height) {
+                            cardHeight = geo.size.height
+                        }
+                        .onChange(of: isExpanded) {
+                            // Update height when action items expand/collapse
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                cardHeight = geo.size.height
+                            }
+                        }
+                }
+            )
+            
+            // Thread expansion view (if needed)
+            if isThreadExpanded {
+                VStack(spacing: 0) {
+                    // Spacer shows black app background - creates "tucked under" effect
+                    Spacer()
+                        .frame(height: cardHeight)
+                    
+                    // Thread content with material background
+                    VStack(spacing: 0) {
+                        // Thread messages
+                        VStack(alignment: .leading, spacing: 16) {
+                            ForEach([
+                                ThreadMessage(
+                                    sender: "Vincent Chase",
+                                    initials: "VC",
+                                    content: "Lorem ipsum dolor sit amet consectetur. Venenatis convallis eu semper volutpat. Scelerisque dapibus platea laoreet eget tristique.",
+                                    timestamp: "2m ago"
+                                ),
+                                ThreadMessage(
+                                    sender: "Eric Murphy",
+                                    initials: "EM",
+                                    content: "Lorem ipsum dolor sit amet consectetur. Venenatis convallis eu semper volutpat. Scelerisque dapibus platea laoreet eget tristique.",
+                                    timestamp: "2m ago"
+                                ),
+                                ThreadMessage(
+                                    sender: "Vincent Chase",
+                                    initials: "VC",
+                                    content: "Lorem ipsum dolor sit amet consectetur. Venenatis convallis eu semper volutpat. Scelerisque dapibus platea laoreet eget tristique.",
+                                    timestamp: "2m ago"
+                                ),
+                                ThreadMessage(
+                                    sender: "Eric Murphy",
+                                    initials: "EM",
+                                    content: "Lorem ipsum dolor sit amet consectetur. Venenatis convallis eu semper volutpat. Scelerisque dapibus platea laoreet eget tristique.",
+                                    timestamp: "2m ago"
+                                )
+                            ].prefix(4)) { message in
+                                ThreadMessageRow(message: message)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                        .padding(.top, 16)
+                        .background(.regularMaterial)
+                        
+                        // Reply interface
+                        ReplyInterface()
+                            .background(.regularMaterial)
+                        
+                        // See More button
+                        HStack {
+                            Spacer()
+                            
+                            Button(action: {
+                                showFullConversation = true
+                            }) {
+                                Text("See more")
+                                    .font(.body)
+                                    .foregroundColor(.blue)
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding(.vertical, 16)
+                        .background(.regularMaterial)
+                    }
+                    .clipShape(BottomRoundedRectangle(radius: 16))
+                }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: isExpanded)
+        .overlay(
+            // Floating urgency menu overlay
+            Group {
+                if showUrgencyMenu {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            UrgencyMenu(
+                                currentUrgency: selectedUrgency,
+                                selectedUrgency: $selectedUrgency,
+                                isPresented: $showUrgencyMenu
+                            )
+                            .fixedSize(horizontal: true, vertical: false)
+                            .offset(x: -8, y: 0)
+                        }
+                        .padding(.top, 48)
+                        .padding(.trailing, 16)
+                        Spacer()
+                    }
+                }
+            }
+        )
+        .fullScreenCover(isPresented: $showFullConversation) {
+            ConversationView(
+                conversationTitle: "Budget Discussion",
+                participants: senders.components(separatedBy: ", "),
+                isPresented: $showFullConversation
+            )
+        }
+    }
+}
+
+// Original MessageCardView for backward compatibility (simplified)
+struct MessageCardView: View {
+    let platformIcon: String
+    let senders: String
+    let timestamp: String
+    let urgency: String
+    let summary: String
+    let actionItems: [String]
+    
+    @State private var isExpanded = false
+    @State private var isThreadExpanded = false
+    @State private var showFullConversation = false
+    @State private var selectedUrgency: String
+    @State private var showUrgencyMenu = false
+    
+    // Initialize selectedUrgency with the passed urgency value
+    init(platformIcon: String, senders: String, timestamp: String, urgency: String, summary: String, actionItems: [String]) {
+        self.platformIcon = platformIcon
+        self.senders = senders
+        self.timestamp = timestamp
+        self.urgency = urgency
+        self.summary = summary
+        self.actionItems = actionItems
+        self._selectedUrgency = State(initialValue: urgency)
+    }
+    
+    var body: some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                isThreadExpanded.toggle()
+            }
+        }) {
+            MessageCardContent(
+                platformIcon: platformIcon,
+                senders: senders,
+                timestamp: timestamp,
+                urgency: urgency,
+                summary: summary,
+                actionItems: actionItems,
+                isExpanded: isExpanded,
+                isThreadExpanded: isThreadExpanded,
+                selectedUrgency: selectedUrgency,
+                showUrgencyMenu: showUrgencyMenu,
+                showShadow: true,
+                onToggleExpand: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isExpanded.toggle()
+                    }
+                },
+                onToggleUrgencyMenu: {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        showUrgencyMenu.toggle()
+                    }
+                },
+                onEllipsis: {}
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .overlay(
+            // Floating urgency menu overlay
+            Group {
+                if showUrgencyMenu {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            UrgencyMenu(
+                                currentUrgency: selectedUrgency,
+                                selectedUrgency: $selectedUrgency,
+                                isPresented: $showUrgencyMenu
+                            )
+                            .fixedSize(horizontal: true, vertical: false)
+                            .offset(x: -8, y: 0)
+                        }
+                        .padding(.top, 48)
+                        .padding(.trailing, 16)
+                        Spacer()
+                    }
+                }
+            }
+        )
+        .fullScreenCover(isPresented: $showFullConversation) {
+            ConversationView(
+                conversationTitle: "Budget Discussion",
+                participants: senders.components(separatedBy: ", "),
+                isPresented: $showFullConversation
+            )
+        }
+    }
 }
 
 #Preview {
   VStack(spacing: 20) {
-    MessageCardView(
+    StackableMessageCardView(
       platformIcon: "bubble.left.and.bubble.right.fill",
       senders: "Vincent Chase, Eric Murphy",
       timestamp: "20 mins ago",
@@ -646,7 +712,7 @@ struct MessageCardView: View {
       ]
     )
     
-    MessageCardView(
+    StackableMessageCardView(
       platformIcon: "bubble.left.and.bubble.right.fill",
       senders: "Team Marketing",
       timestamp: "1 hour ago",

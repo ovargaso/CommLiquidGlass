@@ -1,0 +1,280 @@
+# Cursor Rules for Comm Liquid Glass SwiftUI Project
+
+## Project Overview
+- **Platform**: iOS SwiftUI App
+- **Architecture**: MVVM-like pattern with SwiftUI Views
+- **Target iOS**: 17.0+
+- **Language**: Swift 5.9+
+
+## File Structure & Organization
+```
+Comm Liquid Glass/
+├── Views/
+│   ├── ContentView.swift (Main dashboard container)
+│   ├── MessageCardView.swift (Card components and stackable cards)
+│   ├── ConversationView.swift (Full conversation modal)
+│   ├── HeaderView.swift (Search and sidebar toggle)
+│   ├── SidebarView.swift (Navigation sidebar)
+│   └── PriorityPicker.swift (Sort controls)
+└── Assets.xcassets/ (App icons and colors)
+```
+
+## Coding Standards
+
+### SwiftUI View Structure
+```swift
+struct ExampleView: View {
+    // MARK: - Properties
+    let requiredProperty: String
+    @State private var localState = false
+    @Binding var boundProperty: Bool
+    
+    // MARK: - Initializer (if needed)
+    init(requiredProperty: String) {
+        self.requiredProperty = requiredProperty
+    }
+    
+    // MARK: - Body
+    var body: some View {
+        // View implementation
+    }
+    
+    // MARK: - Private Methods (if needed)
+    private func helperMethod() {
+        // Implementation
+    }
+}
+```
+
+### Naming Conventions
+- **Views**: PascalCase (e.g., `MessageCardView`)
+- **Properties**: camelCase (e.g., `isExpanded`)
+- **State variables**: prefix with `@State private var`
+- **Binding variables**: prefix with `@Binding var`
+- **Constants**: camelCase or UPPER_CASE for global constants
+
+### Component Patterns
+
+#### Card-based UI
+- Use `.regularMaterial` for glass morphism effects
+- Apply `.clipShape(RoundedRectangle(cornerRadius: 16))` for consistent rounded corners
+- Use `.shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)` for depth
+
+#### Color Scheme
+- **Background**: `Color.black` for main app background
+- **Cards**: `.regularMaterial` with white text
+- **Text Colors**: 
+  - Primary: `.white`
+  - Secondary: `.white.opacity(0.7)`
+  - Tertiary: `.white.opacity(0.6)`
+- **Accent Colors**: 
+  - High priority: `.red`
+  - Medium priority: `.orange`
+  - Low priority: `.yellow`
+  - Interactive: `.blue`
+
+#### Animation Standards
+- **Spring animations**: `.spring(response: 0.6, dampingFraction: 0.8)` for major transitions
+- **Ease animations**: `.easeInOut(duration: 0.3)` for minor state changes
+- **Card transitions**: `.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .move(edge: .top).combined(with: .opacity))`
+
+### State Management
+- Use `@State` for local view state
+- Use `@Binding` for parent-child communication
+- Initialize state in `init()` when needed: `self._selectedUrgency = State(initialValue: urgency)`
+
+### Layout Patterns
+- **Spacing**: Use consistent `spacing: 16` for major sections, `spacing: 12` for card content
+- **Padding**: `.padding(.horizontal, 16)` for screen edges, `.padding(16)` for card content
+- **Safe Areas**: Handle with proper navigation and content insets
+
+### iOS 17+ Compatibility
+- Use modern `.onChange(of:)` syntax without parameters:
+  ```swift
+  .onChange(of: someValue) {
+      // Handle change without parameter
+  }
+  ```
+- Avoid deprecated APIs like `.onChange(of:perform:)`
+
+### SwiftUI Best Practices
+
+#### Performance
+- Use `LazyVStack` for long lists
+- Implement proper view identification with `id` when needed
+- Minimize view re-computation with proper state management
+
+#### Accessibility
+- Add accessibility labels where needed
+- Use semantic colors and system fonts when possible
+- Ensure proper contrast ratios
+
+#### Custom Views
+- Extract reusable components (like `MessageCardContent`)
+- Use computed properties for complex view logic
+- Implement proper parameter passing for customization
+
+### Project-Specific Patterns
+
+#### Stackable Cards
+- Always render both front and back cards in `ZStack`
+- Use `GeometryReader` for dynamic height measurement
+- Apply masking for "tucked under" effects
+- Back cards: `showShadow: false`, Front cards: `showShadow: true`
+
+#### Thread Expansion
+- Use spacers with app background for gap illusion
+- Separate content sections with `.background(.regularMaterial)`
+- Apply `BottomRoundedRectangle` for custom shapes
+
+#### Menu Systems
+- Use floating overlays with `.overlay()` for contextual menus
+- Implement proper z-indexing and positioning
+- Apply spring animations for natural feel
+
+### Error Handling
+- Use optional binding for safe unwrapping
+- Implement graceful fallbacks for data loading
+- Add proper validation for user inputs
+
+### Comments & Documentation
+- Use `// MARK: -` for section organization
+- Comment complex animations and layout logic
+- Document custom shapes and modifiers
+- Explain business logic in action handlers
+
+### Testing Considerations
+- Use `#Preview` for SwiftUI previews with multiple states
+- Test with different device sizes and orientations
+- Verify accessibility features work correctly
+
+## File Naming
+- Views: `[Component]View.swift` (e.g., `MessageCardView.swift`)
+- Models: `[Entity].swift` (e.g., `ThreadMessage.swift`)
+- Extensions: `[Type]+[Feature].swift`
+- Utilities: `[Purpose]Helper.swift`
+
+## Git Practices
+- Use descriptive commit messages
+- Prefix commits with component: "MessageCard: Fix stack animation"
+- Keep commits focused on single features/fixes
+
+## Dependencies
+- No external dependencies - pure SwiftUI implementation
+- Use system frameworks: SwiftUI, UIKit (minimal)
+- Prefer native iOS patterns and components 
+
+
+
+##
+  You are an expert iOS developer using Swift and SwiftUI. Follow these guidelines:
+
+
+  # Code Structure
+
+  - Use Swift's latest features and protocol-oriented programming
+  - Prefer value types (structs) over classes
+  - Use MVVM architecture with SwiftUI
+  - Structure: Features/, Core/, UI/, Resources/
+  - Follow Apple's Human Interface Guidelines
+
+  
+  # Naming
+  - camelCase for vars/funcs, PascalCase for types
+  - Verbs for methods (fetchData)
+  - Boolean: use is/has/should prefixes
+  - Clear, descriptive names following Apple style
+
+
+  # Swift Best Practices
+
+  - Strong type system, proper optionals
+  - async/await for concurrency
+  - Result type for errors
+  - @Published, @StateObject for state
+  - Prefer let over var
+  - Protocol extensions for shared code
+
+
+  # UI Development
+
+  - SwiftUI first, UIKit when needed
+  - SF Symbols for icons
+  - Support dark mode, dynamic type
+  - SafeArea and GeometryReader for layout
+  - Handle all screen sizes and orientations
+  - Implement proper keyboard handling
+
+
+  # Performance
+
+  - Profile with Instruments
+  - Lazy load views and images
+  - Optimize network requests
+  - Background task handling
+  - Proper state management
+  - Memory management
+
+
+  # Data & State
+
+  - CoreData for complex models
+  - UserDefaults for preferences
+  - Combine for reactive code
+  - Clean data flow architecture
+  - Proper dependency injection
+  - Handle state restoration
+
+
+  # Security
+
+  - Encrypt sensitive data
+  - Use Keychain securely
+  - Certificate pinning
+  - Biometric auth when needed
+  - App Transport Security
+  - Input validation
+
+
+  # Testing & Quality
+
+  - XCTest for unit tests
+  - XCUITest for UI tests
+  - Test common user flows
+  - Performance testing
+  - Error scenarios
+  - Accessibility testing
+
+
+  # Essential Features
+
+  - Deep linking support
+  - Push notifications
+  - Background tasks
+  - Localization
+  - Error handling
+  - Analytics/logging
+
+
+  # Development Process
+
+  - Use SwiftUI previews
+  - Git branching strategy
+  - Code review process
+  - CI/CD pipeline
+  - Documentation
+  - Unit test coverage
+
+
+  # App Store Guidelines
+
+  - Privacy descriptions
+  - App capabilities
+  - In-app purchases
+  - Review guidelines
+  - App thinning
+  - Proper signing
+
+
+  Follow Apple's documentation for detailed implementation guidance.
+  
