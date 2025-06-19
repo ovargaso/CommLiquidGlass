@@ -80,8 +80,11 @@ struct DashboardView: View {
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
                     .onTapGesture {
-                        withAnimation { isSidebarOpen = false }
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) { 
+                            isSidebarOpen = false 
+                        }
                     }
+                    .transition(.opacity)
                 
                 SidebarView(
                     isSidebarOpen: $isSidebarOpen,
@@ -95,8 +98,12 @@ struct DashboardView: View {
                         "Weekly Sync"
                     ]
                 )
-                .transition(.move(edge: .leading))
-                .ignoresSafeArea(.all, edges: .leading)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .leading).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                .animation(.spring(response: 0.6, dampingFraction: 0.8), value: isSidebarOpen)
+                .zIndex(1) // Ensure sidebar receives gestures properly
             }
         }
         .background(Color.black)
