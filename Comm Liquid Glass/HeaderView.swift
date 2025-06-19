@@ -7,6 +7,15 @@
 
 import SwiftUI
 
+// MARK: - String Extension for Text Width Calculation
+extension String {
+    func widthOfString(usingFont font: UIFont) -> CGFloat {
+        let fontAttributes = [NSAttributedString.Key.font: font]
+        let size = self.size(withAttributes: fontAttributes)
+        return size.width
+    }
+}
+
 // MARK: - FlowLayout for wrapping pills
 struct FlowLayout<Content: View>: View {
     let spacing: CGFloat
@@ -71,8 +80,8 @@ struct HeaderView: View {
     @Binding var isSearchFieldFocused: Bool
     @FocusState private var fieldIsFocused: Bool
     
-    // Selected pill state
-    @State private var selectedPill: String? = nil
+    // Selected pill state - MOVED TO SearchManager for testing
+    // @State private var selectedPill: String? = nil
     
     // Animation states
     @State private var searchBarScale: CGFloat = 1.0
@@ -84,45 +93,108 @@ struct HeaderView: View {
             // No background tap gesture here - we'll handle it differently
             
             VStack(spacing: 0) {
-                // Main header container
+                // Main header container with dynamic layout
                 HStack(spacing: 16) {
-                    // Hamburger Menu Button with Glass Enhancement
-      Button {
-                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) { 
-                            isSidebarOpen.toggle() 
-                        }
-      } label: {
-        Image(systemName: "line.horizontal.3")
-          .font(.title2)
-          .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                            .background(.regularMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                            )
-                            // Glass illumination effect
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(
-                                        RadialGradient(
-                                            colors: [
-                                                Color.white.opacity(0.1),
-                                                Color.clear
-                                            ],
-                                            center: .center,
-                                            startRadius: 0,
-                                            endRadius: 22
+                    // Hamburger Menu Button with Glass Enhancement - hide when searching
+                    if !isSearchFieldFocused {
+                        Button {
+                            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) { 
+                                isSidebarOpen.toggle() 
+                            }
+                        } label: {
+                            Image(systemName: "line.horizontal.3")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .background(.regularMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                )
+                                // Glass illumination effect
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(
+                                            RadialGradient(
+                                                colors: [
+                                                    Color.white.opacity(0.1),
+                                                    Color.clear
+                                                ],
+                                                center: .center,
+                                                startRadius: 0,
+                                                endRadius: 22
+                                            )
                                         )
-                                    )
-                                    .opacity(isSidebarOpen ? 1.0 : 0.0)
-                                    .animation(.easeInOut(duration: 0.3), value: isSidebarOpen)
-                            )
-                    }
+                                        .opacity(isSidebarOpen ? 1.0 : 0.0)
+                                        .animation(.easeInOut(duration: 0.3), value: isSidebarOpen)
+                                )
+                        }
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                                        }
                     
-                    // Enhanced Search Bar with Liquid Glass Effects
+                    // Enhanced Search Bar with Liquid Glass Effects + Pill-Internal X Button
+                ZStack(alignment: .leading) {
                     searchBarContainer
+                    
+                    // SOLUTION: X button positioned precisely inside the pill area
+                    if let selectedPill = searchManager.selectedPill {
+                        GeometryReader { geometry in
+                            HStack(spacing: 0) {
+                                // Calculate exact position to place X button inside pill
+                                let iconWidth: CGFloat = 18 // Search icon width
+                                let iconSpacing: CGFloat = 14 // Spacing after search icon
+                                let pillIconWidth: CGFloat = 12 // Pill icon width (caption font)
+                                let pillIconSpacing: CGFloat = 6 // Spacing after pill icon
+                                let pillLeadingPadding: CGFloat = 12 // Pill's leading padding
+                                let pillText = selectedPill
+                                let estimatedTextWidth = pillText.widthOfString(usingFont: UIFont.systemFont(ofSize: 15, weight: .medium))
+                                let textSpacing: CGFloat = 6 // Space between text and X
+                                
+                                // Calculate X position: search icon + spacing + pill leading + pill icon + pill spacing + text + spacing
+                                let xPosition = iconWidth + iconSpacing + pillLeadingPadding + pillIconWidth + pillIconSpacing + estimatedTextWidth + textSpacing
+                                
+                                Spacer()
+                                    .frame(width: xPosition)
+                                
+                                Button {
+                                    print("✅ PILL INTERNAL X BUTTON - Pill removed successfully!")
+                                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                    impactFeedback.impactOccurred()
+                                    
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        searchManager.selectedPill = nil
+                                        // Keep focus maintained and preserve any typed text
+                                        isSearchFieldFocused = true
+                                        fieldIsFocused = true
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .frame(width: 16, height: 16)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+                                        )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .transition(.asymmetric(
+                                    insertion: .scale.combined(with: .opacity),
+                                    removal: .scale.combined(with: .opacity)
+                                ))
+                                
+                                Spacer()
+                            }
+                        }
+                        .frame(height: 44) // Match search bar height
+                    }
+                }
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -134,14 +206,22 @@ struct HeaderView: View {
                         .padding(.horizontal, 20)
                         .zIndex(1002) // Above everything else
                 }
+                
+                // Filter Pills - show when search is active or filters are applied
+                if isSearchFieldFocused || searchManager.hasActiveFilters || !searchManager.searchText.isEmpty {
+                    FilterPillsView(searchManager: searchManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                        .zIndex(1000)
+                }
             }
         }
         .onChange(of: searchManager.searchText) {
             searchManager.performSearch()
-            // Clear selected pill if user starts typing manually
-            if !searchManager.searchText.isEmpty && selectedPill != nil && searchManager.searchText != selectedPill {
-                selectedPill = nil
-            }
+            // Pills now only clear via explicit user actions (X buttons)
+            // No automatic clearing during typing sessions
         }
         .onChange(of: isSearchFieldFocused) {
             fieldIsFocused = isSearchFieldFocused
@@ -165,42 +245,74 @@ struct HeaderView: View {
                 .rotationEffect(.degrees(searchIconRotation))
                 .animation(.spring(response: 0.6, dampingFraction: 0.8), value: isSearchFieldFocused)
             
-            // Content area - either selected pill or text field
+            // Content area - pill AND text field together
             HStack(spacing: 8) {
-                if let selectedPill = selectedPill {
-                    // Show selected pill
-                    selectedPillView(selectedPill)
-                        .transition(.asymmetric(
-                            insertion: .scale.combined(with: .opacity),
-                            removal: .scale.combined(with: .opacity)
-                        ))
-                } else {
-                    // Show text field
-                    TextField("Search by name, topic, or keyword", text: $searchManager.searchText)
-                        .foregroundColor(.white)
-                        .accentColor(.blue)
-                        .focused($fieldIsFocused)
-                        .submitLabel(.search)
-                        .onSubmit {
-                            searchManager.performSearch()
-                        }
-                        .transition(.asymmetric(
-                            insertion: .opacity,
-                            removal: .opacity
-                        ))
+                // Show pill with space reserved for internal X button (handled externally)
+                if let selectedPill = searchManager.selectedPill {
+                    HStack(spacing: 6) {
+                        Image(systemName: iconForSuggestion(selectedPill))
+                            .font(.caption)
+                            .foregroundColor(.blue.opacity(0.8))
+                        
+                        Text(selectedPill)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        
+                        // Reserve space for the X button to appear inside
+                        Spacer()
+                            .frame(width: 20) // Exact space for the X button
+                    }
+                    .padding(.leading, 12)
+                    .padding(.trailing, 4) // Less trailing padding - X will fill this space
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(.regularMaterial)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.blue.opacity(0.1),
+                                                Color.clear
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            )
+                    )
                 }
+                
+                // Always show text field (with dynamic placeholder)
+                TextField(searchManager.selectedPill != nil ? "Continue typing..." : searchManager.smartPlaceholder, text: $searchManager.searchText)
+                    .foregroundColor(.white)
+                    .accentColor(.blue)
+                    .focused($fieldIsFocused)
+                    .submitLabel(.search)
+                    .onSubmit {
+                        searchManager.performSearch()
+                    }
                 
                 Spacer()
             }
         
-            // Clear Button with Glass Effect
-            if !searchManager.searchText.isEmpty || selectedPill != nil {
+            // Clear Button with Glass Effect - Main search field X (should clear everything)
+            if !searchManager.searchText.isEmpty || searchManager.selectedPill != nil {
           Button {
+                    print("🟡 MAIN SEARCH X BUTTON TAPPED")
+                    print("🟡 BEFORE: searchText = '\(searchManager.searchText)', selectedPill = '\(searchManager.selectedPill ?? "nil")'")
+                    
                     withAnimation(.easeInOut(duration: 0.3)) {
+                        // Clear everything - this is the main search field X button
                         searchManager.clearSearch()
-                        selectedPill = nil
+                        searchManager.selectedPill = nil
                         isSearchFieldFocused = false
                         fieldIsFocused = false
+                        print("🟡 EVERYTHING CLEARED - main search X should clear all")
                     }
           } label: {
             Image(systemName: "xmark.circle.fill")
@@ -271,14 +383,33 @@ struct HeaderView: View {
                 }
             }
         )
-        // Glass morphing animation
+        // Enhanced Glass morphing animation with fluid transitions
         .scaleEffect(searchBarScale)
-        .shadow(
-            color: isSearchFieldFocused ? Color.blue.opacity(0.3) : Color.black.opacity(0.1),
-            radius: isSearchFieldFocused ? 12 : 4,
-            x: 0,
-            y: isSearchFieldFocused ? 6 : 2
+        .overlay(
+            // Dynamic glass illumination effect
+            RoundedRectangle(cornerRadius: isSearchFieldFocused ? 16 : 12)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.clear,
+                            isSearchFieldFocused ? Color.blue.opacity(0.1) : Color.clear,
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .scaleEffect(isSearchFieldFocused ? 1.05 : 1.0)
+                .opacity(isSearchFieldFocused ? 1.0 : 0.0)
+                .animation(.easeInOut(duration: 0.6), value: isSearchFieldFocused)
         )
+        .shadow(
+            color: isSearchFieldFocused ? Color.blue.opacity(0.4) : Color.black.opacity(0.1),
+            radius: isSearchFieldFocused ? 16 : 4,
+            x: 0,
+            y: isSearchFieldFocused ? 8 : 2
+        )
+        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: isSearchFieldFocused)
         // Note: Moving search suggestions to main body level for proper positioning
     }
     
@@ -313,8 +444,30 @@ struct HeaderView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
             
-            // Quick suggestions with glass styling (reordered)
+            // Smart suggestions with glass styling
             VStack(alignment: .leading, spacing: 12) {
+                // Smart Filter-Based Suggestions (prioritized when filters are active)
+                if !searchManager.smartSearchSuggestions.isEmpty {
+                    HStack {
+                        Image(systemName: "brain")
+                            .font(.caption2)
+                            .foregroundColor(.blue.opacity(0.8))
+                        Text("Smart Suggestions")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white.opacity(0.6))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    
+                    FlowLayout(spacing: 8) {
+                        ForEach(searchManager.smartSearchSuggestions, id: \.self) { suggestion in
+                            suggestionPill(suggestion)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                }
+                
                 // Recent Searches (moved to top)
                 HStack {
                     Text("Recent Searches")
@@ -324,6 +477,7 @@ struct HeaderView: View {
                     Spacer()
                 }
                 .padding(.horizontal, 12)
+                .padding(.top, searchManager.smartSearchSuggestions.isEmpty ? 0 : 8)
                 
                 FlowLayout(spacing: 8) {
                     ForEach(searchManager.recentSearches, id: \.self) { suggestion in
@@ -366,85 +520,30 @@ struct HeaderView: View {
         .zIndex(1000) // Higher than other content
     }
     
-    // MARK: - Selected Pill View (in search bar)
+    // MARK: - Selected Pill View (in search bar) - UNUSED IN CURRENT TEST
+    // Keeping for reference but not currently used
     @ViewBuilder
     private func selectedPillView(_ text: String) -> some View {
-        HStack(spacing: 6) {
-            // Tappable content area for editing
-            Button {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    selectedPill = nil
-                    isSearchFieldFocused = true
-                    fieldIsFocused = true
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: iconForSuggestion(text))
-                        .font(.caption)
-                        .foregroundColor(.blue.opacity(0.8))
-                    
-                    Text(text)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            // Small remove button
-            Button {
-                print("🧪 DEBUG: X button in pill was tapped!")
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    selectedPill = nil
-                    searchManager.clearSearch()
-                }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white.opacity(0.6))
-                    .frame(width: 16, height: 16)
-                    .background(Circle().fill(.ultraThinMaterial))
-            }
-            .buttonStyle(PlainButtonStyle())
-            .contentShape(Circle()) // Make the hit area clear and prevent gesture conflicts
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            // Combine all styling into single background
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.regularMaterial)
-                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                .background(
-                    // Subtle blue glow for selected state
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.blue.opacity(0.1),
-                                    Color.clear
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
-        )
- 
+        Text("Unused in current test")
      }
      
      // MARK: - Suggestion Pill
     @ViewBuilder
     private func suggestionPill(_ text: String) -> some View {
         Button {
+            print("🟦 SUGGESTION PILL TAPPED: '\(text)'")
+            
+            // Add haptic feedback for consistency
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
 
             withAnimation(.easeInOut(duration: 0.3)) {
-                selectedPill = text
-                searchManager.searchText = text
-                isSearchFieldFocused = false
-                fieldIsFocused = false
+                searchManager.selectedPill = text
+                searchManager.searchText = ""  // Clear text to start fresh typing
+                // Keep focus active so cursor appears
+                isSearchFieldFocused = true
+                fieldIsFocused = true
+                print("🟦 PILL CREATED: '\(text)' - Focus maintained")
             }
         } label: {
             HStack(spacing: 6) {
@@ -533,6 +632,8 @@ struct HeaderView: View {
         }
     }
 }
+
+
 
 // MARK: - Preview
 #Preview {

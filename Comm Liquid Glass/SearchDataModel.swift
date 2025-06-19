@@ -71,6 +71,42 @@ enum Priority: String, CaseIterable {
     }
 }
 
+// Action item with completion state
+struct ActionItem: Identifiable, Hashable {
+    let id = UUID()
+    let text: String
+    var isCompleted: Bool = false
+}
+
+// Filter preset for quick filter combinations
+struct FilterPreset: Identifiable, Hashable {
+    let id = UUID()
+    let name: String
+    let icon: String
+    let color: Color
+    let priorities: [Priority]
+    let platforms: [Platform]
+    let contentTypes: [ContentType]
+    let dateRange: DateRange
+    let searchTerms: [String]
+    
+    init(name: String, icon: String, color: Color, 
+         priorities: [Priority] = [], 
+         platforms: [Platform] = [], 
+         contentTypes: [ContentType] = [], 
+         dateRange: DateRange = .allTime, 
+         searchTerms: [String] = []) {
+        self.name = name
+        self.icon = icon
+        self.color = color
+        self.priorities = priorities
+        self.platforms = platforms
+        self.contentTypes = contentTypes
+        self.dateRange = dateRange
+        self.searchTerms = searchTerms
+    }
+}
+
 struct SearchableContent: Identifiable, Hashable {
     let id = UUID()
     let type: ContentType
@@ -80,7 +116,7 @@ struct SearchableContent: Identifiable, Hashable {
     let subtitle: String
     let content: String
     let timestamp: String
-    let actionItems: [String]
+    var actionItems: [ActionItem]
     let participants: [String]
     let tags: [String]
     
@@ -108,18 +144,119 @@ struct SearchableContent: Identifiable, Hashable {
 
 // MARK: - Search Manager
 
+// Filter types for the pill system
+enum FilterCategory: String, CaseIterable {
+    case priority = "Priority"
+    case platform = "Platform"
+    case contentType = "Type"
+    case dateRange = "Date"
+}
+
+enum DateRange: String, CaseIterable {
+    case today = "Today"
+    case thisWeek = "This Week"
+    case thisMonth = "This Month"
+    case thisQuarter = "This Quarter"
+    case lastQuarter = "Last Quarter"
+    case allTime = "All Time"
+    
+    var displayName: String { rawValue }
+    
+    func matches(timestamp: String) -> Bool {
+        // For demo purposes, we'll use simple string matching
+        // In a real app, you'd parse actual dates
+        switch self {
+        case .today:
+            return timestamp.contains("mins ago") || timestamp.contains("hour ago")
+        case .thisWeek:
+            return timestamp.contains("mins ago") || timestamp.contains("hour") || timestamp.contains("day ago") || timestamp.contains("days ago")
+        case .thisMonth:
+            return !timestamp.contains("months ago") && !timestamp.contains("year ago") && !timestamp.contains("quarter ago")
+        case .thisQuarter:
+            // Current quarter: anything up to 3 months old
+            return !timestamp.contains("months ago") || 
+                   timestamp.contains("1 month ago") || 
+                   timestamp.contains("2 months ago") || 
+                   timestamp.contains("3 months ago")
+        case .lastQuarter:
+            // Previous quarter: 3-6 months ago
+            return timestamp.contains("3 months ago") || 
+                   timestamp.contains("4 months ago") || 
+                   timestamp.contains("5 months ago") || 
+                   timestamp.contains("6 months ago") ||
+                   timestamp.contains("quarter ago")
+        case .allTime:
+            return true
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .today: return "clock.fill"
+        case .thisWeek: return "calendar.day.timeline.leading"
+        case .thisMonth: return "calendar"
+        case .thisQuarter: return "calendar.badge.clock"
+        case .lastQuarter: return "clock.arrow.circlepath"
+        case .allTime: return "infinity"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .today: return "Last 24 hours"
+        case .thisWeek: return "Last 7 days"
+        case .thisMonth: return "Last 30 days"
+        case .thisQuarter: return "Last 3 months"
+        case .lastQuarter: return "3-6 months ago"
+        case .allTime: return "No time limit"
+        }
+    }
+}
+
 @MainActor
 class SearchManager: ObservableObject {
     @Published var searchText: String = ""
     @Published var searchResults: [SearchableContent] = []
     @Published var isSearching: Bool = false
+    
+    // TESTING: Move selectedPill here for centralized state management
+    @Published var selectedPill: String? = nil
+    
+    // Enhanced filter state
+    @Published var selectedPriorities: Set<Priority> = []
+    @Published var selectedPlatforms: Set<Platform> = []
+    @Published var selectedContentTypes: Set<ContentType> = []
+    @Published var selectedDateRange: DateRange = .allTime
+    
+    // Legacy filters for backward compatibility
     @Published var selectedFilter: ContentType? = nil
     @Published var selectedPlatform: Platform? = nil
     
     private let allContent: [SearchableContent] = MockSearchData.allContent
     
+    // Computed property to check if any filters are active
+    var hasActiveFilters: Bool {
+        !selectedPriorities.isEmpty || 
+        !selectedPlatforms.isEmpty || 
+        !selectedContentTypes.isEmpty || 
+        selectedDateRange != .allTime
+    }
+    
+    // Count of active filters for UI display
+    var activeFilterCount: Int {
+        var count = 0
+        if !selectedPriorities.isEmpty { count += 1 }
+        if !selectedPlatforms.isEmpty { count += 1 }
+        if !selectedContentTypes.isEmpty { count += 1 }
+        if selectedDateRange != .allTime { count += 1 }
+        return count
+    }
+    
     func performSearch() {
-        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let trimmedText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // If no search text and no filters, clear results
+        guard !trimmedText.isEmpty || hasActiveFilters else {
             searchResults = []
             isSearching = false
             return
@@ -128,16 +265,28 @@ class SearchManager: ObservableObject {
         isSearching = true
         
         let filteredContent = allContent.filter { content in
-            // Text search
-            let matchesText = content.searchableText.localizedCaseInsensitiveContains(searchText)
+            // Text search (only apply if there's search text)
+            let matchesText = trimmedText.isEmpty || content.searchableText.localizedCaseInsensitiveContains(trimmedText)
             
-            // Filter by content type if selected
-            let matchesFilter = selectedFilter == nil || content.type == selectedFilter
+            // Priority filter
+            let matchesPriority = selectedPriorities.isEmpty || selectedPriorities.contains(content.priority)
             
-            // Filter by platform if selected
-            let matchesPlatform = selectedPlatform == nil || content.platform == selectedPlatform
+            // Platform filter
+            let matchesPlatform = selectedPlatforms.isEmpty || selectedPlatforms.contains(content.platform)
             
-            return matchesText && matchesFilter && matchesPlatform
+            // Content type filter
+            let matchesContentType = selectedContentTypes.isEmpty || selectedContentTypes.contains(content.type)
+            
+            // Date range filter
+            let matchesDateRange = selectedDateRange.matches(timestamp: content.timestamp)
+            
+            // Legacy filter compatibility
+            let matchesLegacyFilter = selectedFilter == nil || content.type == selectedFilter
+            let matchesLegacyPlatform = selectedPlatform == nil || content.platform == selectedPlatform
+            
+            return matchesText && matchesPriority && matchesPlatform && 
+                   matchesContentType && matchesDateRange && 
+                   matchesLegacyFilter && matchesLegacyPlatform
         }
         
         // Sort by priority (High -> Medium -> Low) and then by recency
@@ -155,21 +304,227 @@ class SearchManager: ObservableObject {
         }
     }
     
+    // MARK: - Filter Actions
+    
+    func togglePriority(_ priority: Priority) {
+        if selectedPriorities.contains(priority) {
+            selectedPriorities.remove(priority)
+        } else {
+            selectedPriorities.insert(priority)
+        }
+        performSearch()
+    }
+    
+    func togglePlatform(_ platform: Platform) {
+        if selectedPlatforms.contains(platform) {
+            selectedPlatforms.remove(platform)
+        } else {
+            selectedPlatforms.insert(platform)
+        }
+        performSearch()
+    }
+    
+    func toggleContentType(_ contentType: ContentType) {
+        if selectedContentTypes.contains(contentType) {
+            selectedContentTypes.remove(contentType)
+        } else {
+            selectedContentTypes.insert(contentType)
+        }
+        performSearch()
+    }
+    
+    func setDateRange(_ dateRange: DateRange) {
+        selectedDateRange = dateRange
+        performSearch()
+    }
+    
+    func clearAllFilters() {
+        selectedPriorities.removeAll()
+        selectedPlatforms.removeAll()
+        selectedContentTypes.removeAll()
+        selectedDateRange = .allTime
+        selectedFilter = nil
+        selectedPlatform = nil
+        performSearch()
+    }
+    
     func clearSearch() {
         searchText = ""
         searchResults = []
         isSearching = false
+        clearAllFilters()
+        // Also clear any search-related state
         selectedFilter = nil
         selectedPlatform = nil
+        selectedPill = nil // Clear pill when clearing search
     }
     
-    // Quick search suggestions (limited to 4 each for clean UI)
+    // TESTING: Add dedicated pill management
+    func clearPill() {
+        selectedPill = nil
+        print("🧪 SearchManager.clearPill() called")
+    }
+    
+    // MARK: - Smart Search Suggestions
+    
+    // Filter-aware search suggestions that adapt based on active filters
+    var smartSearchSuggestions: [String] {
+        var suggestions: [String] = []
+        
+        // Priority-based suggestions
+        if selectedPriorities.contains(.high) {
+            suggestions.append(contentsOf: ["Critical Issues", "Urgent Reviews", "Immediate Actions"])
+        }
+        if selectedPriorities.contains(.medium) {
+            suggestions.append(contentsOf: ["Weekly Sync", "Progress Update", "Team Meeting"])
+        }
+        if selectedPriorities.contains(.low) {
+            suggestions.append(contentsOf: ["Documentation", "Best Practices", "Process Improvements"])
+        }
+        
+        // Platform-specific suggestions
+        if selectedPlatforms.contains(.slack) {
+            suggestions.append(contentsOf: ["Team Chat", "Quick Updates", "Notifications"])
+        }
+        if selectedPlatforms.contains(.gmail) || selectedPlatforms.contains(.outlook) {
+            suggestions.append(contentsOf: ["Email Thread", "Stakeholder Update", "External Communication"])
+        }
+        if selectedPlatforms.contains(.teams) || selectedPlatforms.contains(.zoom) {
+            suggestions.append(contentsOf: ["Meeting Notes", "Video Call", "Collaboration Session"])
+        }
+        
+        // Content type suggestions
+        if selectedContentTypes.contains(.message) {
+            suggestions.append(contentsOf: ["Discussion", "Announcement", "Update"])
+        }
+        if selectedContentTypes.contains(.conversation) {
+            suggestions.append(contentsOf: ["Thread", "Dialogue", "Exchange"])
+        }
+        if selectedContentTypes.contains(.contact) {
+            suggestions.append(contentsOf: ["Team Member", "Stakeholder", "Expert"])
+        }
+        
+        // Date range suggestions
+        switch selectedDateRange {
+        case .today:
+            suggestions.append(contentsOf: ["Today's Updates", "Recent Changes", "Latest News"])
+        case .thisWeek:
+            suggestions.append(contentsOf: ["This Week", "Weekly Report", "Current Sprint"])
+        case .thisQuarter:
+            suggestions.append(contentsOf: ["Quarterly Review", "Q1 Goals", "Strategic Planning"])
+        case .lastQuarter:
+            suggestions.append(contentsOf: ["Previous Quarter", "Historical Data", "Past Results"])
+        default:
+            break
+        }
+        
+        // Remove duplicates and return first 6
+        return Array(Set(suggestions)).prefix(6).map { $0 }
+    }
+    
+    // Quick filter combinations - popular filter presets
+    var quickFilterPresets: [FilterPreset] {
+        [
+            FilterPreset(
+                name: "High Priority Today",
+                icon: "exclamationmark.triangle.fill",
+                color: .red,
+                priorities: [.high],
+                dateRange: .today
+            ),
+            FilterPreset(
+                name: "Team Discussions",
+                icon: "bubble.left.and.bubble.right.fill",
+                color: .blue,
+                platforms: [.slack, .teams],
+                contentTypes: [.message, .conversation]
+            ),
+            FilterPreset(
+                name: "This Week's Work",
+                icon: "calendar.badge.clock",
+                color: .green,
+                priorities: [.high, .medium],
+                dateRange: .thisWeek
+            ),
+            FilterPreset(
+                name: "Email Communications",
+                icon: "envelope.fill",
+                color: .orange,
+                platforms: [.gmail, .outlook],
+                contentTypes: [.message, .conversation]
+            ),
+            FilterPreset(
+                name: "Research & Discovery",
+                icon: "magnifyingglass.circle.fill",
+                color: .purple,
+                searchTerms: ["research", "discovery", "user", "analysis"]
+            ),
+            FilterPreset(
+                name: "Design & UX",
+                icon: "paintbrush.fill",
+                color: .pink,
+                searchTerms: ["design", "UX", "UI", "wireframe", "prototype"]
+            )
+        ]
+    }
+    
+    // Dynamic placeholder text based on active filters
+    var smartPlaceholder: String {
+        var context: [String] = []
+        
+        if !selectedPriorities.isEmpty {
+            let priorities = selectedPriorities.map { $0.rawValue.lowercased() }.joined(separator: ", ")
+            context.append("\(priorities) priority")
+        }
+        
+        if !selectedPlatforms.isEmpty {
+            let platforms = selectedPlatforms.map { $0.rawValue }.joined(separator: ", ")
+            context.append("in \(platforms)")
+        }
+        
+        if !selectedContentTypes.isEmpty {
+            let types = selectedContentTypes.map { $0.rawValue }.joined(separator: ", ")
+            context.append("\(types) content")
+        }
+        
+        if selectedDateRange != .allTime {
+            context.append("from \(selectedDateRange.displayName.lowercased())")
+        }
+        
+        if context.isEmpty {
+            return "Search by name, topic, or keyword"
+        } else {
+            return "Search \(context.joined(separator: " "))..."
+        }
+    }
+    
+    // Legacy search suggestions for when no filters are active
     var popularSearches: [String] {
-        Array(["Vincent Chase", "Budget Review", "Q3 data", "Client Meeting", "Product Launch"].prefix(4))
+        Array(["User Research", "Design System", "Product Roadmap", "A/B Testing"].prefix(4))
     }
     
     var recentSearches: [String] {
-        Array(["Team Standup", "Project Sigma", "Marketing Campaign", "Weekly Sync"].prefix(4))
+        Array(["UX Research", "Design Review", "Product Sprint", "User Journey"].prefix(4))
+    }
+    
+    // MARK: - Quick Filter Actions
+    
+    func applyFilterPreset(_ preset: FilterPreset) {
+        // Clear existing filters
+        clearAllFilters()
+        
+        // Apply preset filters
+        selectedPriorities = Set(preset.priorities)
+        selectedPlatforms = Set(preset.platforms)
+        selectedContentTypes = Set(preset.contentTypes)
+        selectedDateRange = preset.dateRange
+        
+        // Apply search terms if any
+        if !preset.searchTerms.isEmpty {
+            searchText = preset.searchTerms.joined(separator: " ")
+        }
+        
+        performSearch()
     }
 }
 
@@ -177,208 +532,297 @@ class SearchManager: ObservableObject {
 
 struct MockSearchData {
     static let allContent: [SearchableContent] = [
-        // Existing cards from your app
+        // Product Manager focused content
         SearchableContent(
             type: .message,
             platform: .slack,
             priority: .high,
-            title: "Consumer Segmentation Report",
-            subtitle: "Vincent Chase, Eric Murphy",
-            content: "Vincent wants the Consumer Segmentation report updated with Q3 data and needs approval from Ari before the client presentation tomorrow.",
+            title: "User Research Findings",
+            subtitle: "Emily Chen, Product Research",
+            content: "Latest user interviews reveal 73% of users struggle with our onboarding flow. Need to prioritize UX improvements before Q4 launch.",
             timestamp: "20 mins ago",
             actionItems: [
-                "Get Ari's approval",
-                "Schedule meeting with Product",
-                "Update Q3 segmentation data",
-                "Prepare client presentation"
+                ActionItem(text: "Review user interview recordings"),
+                ActionItem(text: "Update onboarding wireframes"),
+                ActionItem(text: "Schedule design sprint"),
+                ActionItem(text: "Validate solutions with PM team")
             ],
-            participants: ["Vincent Chase", "Eric Murphy"],
-            tags: ["segmentation", "Q3", "client", "presentation", "urgent"]
+            participants: ["Emily Chen", "Product Research"],
+            tags: ["user research", "onboarding", "UX", "interviews", "Q4"]
         ),
         
         SearchableContent(
             type: .message,
             platform: .teams,
             priority: .medium,
-            title: "Campaign Asset Review",
-            subtitle: "Team Marketing",
-            content: "New campaign assets need review and approval from creative director. Timeline is tight for Friday launch.",
+            title: "Design System Updates",
+            subtitle: "Design Team",
+            content: "New component library ready for review. Updated button styles, form elements, and navigation patterns based on accessibility guidelines.",
             timestamp: "1 hour ago",
             actionItems: [
-                "Review creative assets",
-                "Get director approval",
-                "Schedule launch meeting"
+                ActionItem(text: "Review component library"),
+                ActionItem(text: "Test accessibility compliance"),
+                ActionItem(text: "Update design documentation"),
+                ActionItem(text: "Schedule implementation with dev team")
             ],
-            participants: ["Team Marketing", "Creative Director"],
-            tags: ["campaign", "assets", "review", "launch", "friday"]
+            participants: ["Design Team", "UI/UX Lead"],
+            tags: ["design system", "components", "accessibility", "documentation"]
         ),
         
         SearchableContent(
             type: .conversation,
             platform: .outlook,
             priority: .low,
-            title: "Quarterly Planning",
-            subtitle: "Sarah Johnson",
-            content: "Quick sync on quarterly goals and budget planning for next quarter.",
+            title: "Product Roadmap Planning",
+            subtitle: "Sarah Martinez - Senior PM",
+            content: "Quarterly roadmap review focusing on feature prioritization, user impact metrics, and resource allocation for next quarter.",
             timestamp: "2 hours ago",
             actionItems: [
-                "Review quarterly metrics",
-                "Plan budget allocation",
-                "Schedule team sync"
+                ActionItem(text: "Analyze feature impact scores"),
+                ActionItem(text: "Review resource capacity"),
+                ActionItem(text: "Update roadmap timeline"),
+                ActionItem(text: "Prepare stakeholder presentation")
             ],
-            participants: ["Sarah Johnson"],
-            tags: ["quarterly", "budget", "planning", "goals", "metrics"]
+            participants: ["Sarah Martinez"],
+            tags: ["product roadmap", "feature prioritization", "metrics", "planning"]
         ),
         
-        // Additional mock content for richer search results
+        // Product Research focused content
         SearchableContent(
             type: .contact,
             platform: .slack,
             priority: .high,
-            title: "Alex Rivera - Product Manager",
-            subtitle: "Available for urgent product decisions",
-            content: "Lead Product Manager overseeing iOS app development, feature roadmap, and user experience optimization.",
+            title: "Dr. Alex Rivera - Head of Product Research",
+            subtitle: "Leading user research and product discovery",
+            content: "Senior Product Researcher specializing in user behavior analysis, usability testing, and product discovery methodologies.",
             timestamp: "5 mins ago",
-            actionItems: ["Schedule product review", "Discuss feature priorities"],
-            participants: ["Alex Rivera"],
-            tags: ["product", "manager", "iOS", "roadmap", "UX"]
+            actionItems: [ActionItem(text: "Schedule research planning session"), ActionItem(text: "Review user testing protocols")],
+            participants: ["Dr. Alex Rivera"],
+            tags: ["product research", "user behavior", "usability testing", "discovery"]
         ),
         
         SearchableContent(
             type: .message,
             platform: .gmail,
             priority: .high,
-            title: "Client Onboarding Issues",
-            subtitle: "Customer Success Team",
-            content: "Three new enterprise clients are experiencing onboarding delays. Need immediate technical support and account management intervention.",
+            title: "A/B Test Results Critical",
+            subtitle: "Product Analytics Team",
+            content: "Checkout flow experiment shows 15% conversion drop. Need immediate product decision on whether to rollback or iterate based on user feedback data.",
             timestamp: "15 mins ago",
             actionItems: [
-                "Contact technical support",
-                "Assign dedicated account manager",
-                "Schedule client calls",
-                "Prepare compensation plan"
+                ActionItem(text: "Analyze user behavior data"),
+                ActionItem(text: "Review heatmap recordings"),
+                ActionItem(text: "Consult with UX research team"),
+                ActionItem(text: "Make rollback decision by EOD")
             ],
-            participants: ["Customer Success Team", "Technical Support"],
-            tags: ["client", "onboarding", "enterprise", "delays", "support"]
+            participants: ["Product Analytics Team", "Data Science"],
+            tags: ["A/B testing", "conversion", "checkout", "user feedback", "analytics"]
         ),
         
         SearchableContent(
             type: .conversation,
             platform: .teams,
             priority: .medium,
-            title: "Weekly Engineering Standup",
-            subtitle: "Engineering Team",
-            content: "Sprint review, blockers discussion, and next iteration planning for the mobile app development team.",
+            title: "Weekly Product Discovery",
+            subtitle: "Product Research Team",
+            content: "User interview insights, competitor analysis findings, and market research updates for upcoming feature development sprint.",
             timestamp: "45 mins ago",
             actionItems: [
-                "Review sprint progress",
-                "Address technical blockers",
-                "Plan next iteration",
-                "Update project timeline"
+                ActionItem(text: "Synthesize user interview data"),
+                ActionItem(text: "Update competitor feature matrix"),
+                ActionItem(text: "Prepare research insights report"),
+                ActionItem(text: "Plan next week's user sessions")
             ],
-            participants: ["Engineering Team", "Scrum Master", "Tech Lead"],
-            tags: ["engineering", "standup", "sprint", "mobile", "blockers"]
+            participants: ["Product Research Team", "UX Researchers"],
+            tags: ["product discovery", "user interviews", "competitor analysis", "market research"]
         ),
         
+        // Product Design focused content
         SearchableContent(
             type: .topic,
             platform: .discord,
             priority: .low,
-            title: "Remote Work Guidelines",
-            subtitle: "HR & Operations",
-            content: "Updated remote work policies, home office stipends, and team collaboration best practices for distributed teams.",
+            title: "Design Critique Guidelines",
+            subtitle: "Design Team & Product",
+            content: "Updated design review process, feedback frameworks, and collaboration protocols between design and product management teams.",
             timestamp: "1 day ago",
             actionItems: [
-                "Review new policies",
-                "Submit home office requests",
-                "Update team calendars"
+                ActionItem(text: "Review critique framework"),
+                ActionItem(text: "Schedule design review sessions"),
+                ActionItem(text: "Update feedback templates")
             ],
-            participants: ["HR Team", "Operations"],
-            tags: ["remote", "guidelines", "policies", "home office", "collaboration"]
+            participants: ["Design Team", "Product Team"],
+            tags: ["design critique", "feedback", "collaboration", "review process"]
         ),
         
         SearchableContent(
             type: .message,
             platform: .zoom,
             priority: .high,
-            title: "Investor Meeting Prep",
-            subtitle: "Executive Team",
-            content: "Final preparation for Series B investor presentations. Need updated financial models, product demo, and growth projections.",
+            title: "User Journey Mapping Session",
+            subtitle: "UX Design & Product Team",
+            content: "Critical mapping session for new user onboarding experience. Need product requirements, design wireframes, and user research insights.",
             timestamp: "30 mins ago",
             actionItems: [
-                "Finalize financial models",
-                "Prepare product demo",
-                "Review growth projections",
-                "Schedule practice run"
+                ActionItem(text: "Complete user journey maps"),
+                ActionItem(text: "Define key user touchpoints"),
+                ActionItem(text: "Create wireframe prototypes"),
+                ActionItem(text: "Validate with user research data")
             ],
-            participants: ["CEO", "CFO", "VP Sales"],
-            tags: ["investor", "series B", "financial", "demo", "growth"]
+            participants: ["UX Designer", "Product Manager", "User Researcher"],
+            tags: ["user journey", "onboarding", "wireframes", "touchpoints"]
         ),
         
         SearchableContent(
             type: .contact,
             platform: .outlook,
             priority: .medium,
-            title: "Maria Gonzalez - Design Lead",
-            subtitle: "Leading UI/UX design initiatives",
-            content: "Senior Design Lead responsible for design system, user research, and cross-platform experience consistency.",
+            title: "Maria Santos - Lead Product Designer",
+            subtitle: "Senior designer focused on user experience",
+            content: "Lead Product Designer responsible for end-to-end user experience, design system maintenance, and cross-functional product collaboration.",
             timestamp: "2 hours ago",
-            actionItems: ["Schedule design review", "Discuss design system updates"],
-            participants: ["Maria Gonzalez"],
-            tags: ["design", "UI", "UX", "research", "design system"]
+            actionItems: [ActionItem(text: "Schedule design system review"), ActionItem(text: "Plan user testing sessions")],
+            participants: ["Maria Santos"],
+            tags: ["product design", "user experience", "design system", "collaboration"]
         ),
         
         SearchableContent(
             type: .message,
             platform: .slack,
             priority: .medium,
-            title: "API Performance Issues",
-            subtitle: "Backend Team",
-            content: "Response times have increased by 40% over the past week. Need to investigate database queries and optimize critical endpoints.",
+            title: "Prototype Testing Results",
+            subtitle: "UX Research & Design",
+            content: "Interactive prototype testing reveals navigation confusion in 60% of users. Need design iterations before development handoff next week.",
             timestamp: "3 hours ago",
             actionItems: [
-                "Analyze database performance",
-                "Optimize slow queries",
-                "Review API endpoints",
-                "Implement caching strategy"
+                ActionItem(text: "Analyze prototype test recordings"),
+                ActionItem(text: "Redesign navigation flow"),
+                ActionItem(text: "Create updated interactive prototype"),
+                ActionItem(text: "Schedule follow-up user testing")
             ],
-            participants: ["Backend Team", "DevOps", "Database Admin"],
-            tags: ["API", "performance", "database", "optimization", "caching"]
+            participants: ["UX Research", "Product Design Team"],
+            tags: ["prototype testing", "navigation", "user testing", "design iteration"]
         ),
         
         SearchableContent(
             type: .conversation,
             platform: .teams,
             priority: .low,
-            title: "Company All-Hands Meeting",
-            subtitle: "All Employees",
-            content: "Monthly company update covering quarterly results, new hires, product updates, and upcoming company events.",
+            title: "Product Design All-Hands",
+            subtitle: "All Product & Design Teams",
+            content: "Monthly sync covering design system updates, research insights, product feature prioritization, and cross-team collaboration.",
             timestamp: "1 day ago",
             actionItems: [
-                "Review quarterly results",
-                "Welcome new team members",
-                "Share product updates"
+                ActionItem(text: "Review design system changelog"),
+                ActionItem(text: "Share research findings"),
+                ActionItem(text: "Align on feature priorities")
             ],
-            participants: ["All Employees", "Leadership Team"],
-            tags: ["all hands", "company", "quarterly", "updates", "team"]
+            participants: ["Product Team", "Design Team", "Research Team"],
+            tags: ["design all-hands", "design system", "research insights", "collaboration"]
         ),
         
         SearchableContent(
             type: .topic,
             platform: .gmail,
             priority: .high,
-            title: "Security Compliance Audit",
-            subtitle: "Security & Compliance Team",
-            content: "Annual SOC 2 audit requirements, security policy updates, and employee security training mandatory completion.",
+            title: "Product Discovery Workshop",
+            subtitle: "Product Management & Research",
+            content: "Intensive 2-day workshop on user needs identification, problem validation methodologies, and product opportunity assessment.",
             timestamp: "4 hours ago",
             actionItems: [
-                "Complete security training",
-                "Update access permissions",
-                "Review compliance policies",
-                "Submit audit documentation"
+                ActionItem(text: "Prepare user persona research"),
+                ActionItem(text: "Define problem hypotheses"),
+                ActionItem(text: "Create opportunity scoring framework"),
+                ActionItem(text: "Schedule stakeholder interviews")
             ],
-            participants: ["Security Team", "Compliance Officer"],
-            tags: ["security", "compliance", "SOC 2", "audit", "training"]
+            participants: ["Product Managers", "Product Researchers"],
+            tags: ["product discovery", "user needs", "problem validation", "opportunity assessment"]
+        ),
+        
+        // Quarter-relevant content for testing new filters
+        SearchableContent(
+            type: .message,
+            platform: .slack,
+            priority: .high,
+            title: "Q1 Performance Review",
+            subtitle: "Product Team Quarterly Review",
+            content: "Comprehensive review of Q1 goals, metrics achieved, and strategic learnings for upcoming quarter planning.",
+            timestamp: "1 month ago",
+            actionItems: [
+                ActionItem(text: "Analyze Q1 metrics"),
+                ActionItem(text: "Document key learnings"),
+                ActionItem(text: "Prepare Q2 strategic plan")
+            ],
+            participants: ["Product Team", "Leadership"],
+            tags: ["quarterly review", "performance", "metrics", "strategy"]
+        ),
+        
+        SearchableContent(
+            type: .conversation,
+            platform: .teams,
+            priority: .medium,
+            title: "Design System Migration",
+            subtitle: "Design & Engineering Teams",
+            content: "Major design system overhaul completed, migrating legacy components to new design tokens and component architecture.",
+            timestamp: "2 months ago",
+            actionItems: [
+                ActionItem(text: "Complete component audit"),
+                ActionItem(text: "Update design documentation"),
+                ActionItem(text: "Train teams on new system")
+            ],
+            participants: ["Design System Team", "Engineering"],
+            tags: ["design system", "migration", "components", "design tokens"]
+        ),
+        
+        SearchableContent(
+            type: .topic,
+            platform: .outlook,
+            priority: .low,
+            title: "Annual Product Strategy",
+            subtitle: "Strategic Planning Session",
+            content: "Annual product roadmap and strategic direction setting for the upcoming year based on market research and user feedback.",
+            timestamp: "4 months ago",
+            actionItems: [
+                ActionItem(text: "Conduct market analysis"),
+                ActionItem(text: "Review user feedback"),
+                ActionItem(text: "Define strategic priorities")
+            ],
+            participants: ["Product Leadership", "Strategy Team"],
+            tags: ["annual planning", "product strategy", "roadmap", "market analysis"]
+        ),
+        
+        SearchableContent(
+            type: .message,
+            platform: .discord,
+            priority: .medium,
+            title: "User Research Initiative",
+            subtitle: "Research Team Retrospective",
+            content: "Last quarter's user research initiative results, methodology improvements, and recommendations for ongoing research programs.",
+            timestamp: "5 months ago",
+            actionItems: [
+                ActionItem(text: "Analyze research outcomes"),
+                ActionItem(text: "Improve research methodology"),
+                ActionItem(text: "Plan ongoing research program")
+            ],
+            participants: ["Research Team", "Product Team"],
+            tags: ["user research", "retrospective", "methodology", "research program"]
+        ),
+        
+        SearchableContent(
+            type: .contact,
+            platform: .zoom,
+            priority: .high,
+            title: "Product Leadership Sync",
+            subtitle: "Executive Team Alignment",
+            content: "Strategic alignment session between product leadership and executive team on company direction and product priorities.",
+            timestamp: "3 months ago",
+            actionItems: [
+                ActionItem(text: "Align on strategic direction"),
+                ActionItem(text: "Review product priorities"),
+                ActionItem(text: "Plan resource allocation")
+            ],
+            participants: ["Product Leadership", "Executive Team"],
+            tags: ["leadership", "strategy", "alignment", "priorities"]
         )
     ]
 } 

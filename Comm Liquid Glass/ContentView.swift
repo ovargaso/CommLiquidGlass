@@ -31,7 +31,6 @@ struct DashboardView: View {
                     .contentShape(Rectangle())
                     .ignoresSafeArea()
                     .onTapGesture {
-
                         withAnimation(.easeInOut(duration: 0.3)) {
                             isSearchFieldFocused = false
                         }
@@ -43,51 +42,78 @@ struct DashboardView: View {
             VStack(spacing: 16) {
                 HeaderView(isSidebarOpen: $isSidebarOpen, searchManager: searchManager, isSearchFieldFocused: $isSearchFieldFocused)
                 
-                PriorityPicker(selectedSort: $selectedSort)
+                // Show priority picker only when not searching
+                if !searchManager.isSearching && searchManager.searchText.isEmpty {
+                    PriorityPicker(selectedSort: $selectedSort)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                }
                 
                 ScrollView {
                     LazyVStack(spacing: 16) {
-                        StackableMessageCardView(
-                            platformIcon: "bubble.left.and.bubble.right.fill",
-                            senders: "Vincent Chase, Eric Murphy",
-                            timestamp: "20 mins ago",
-                            urgency: "High",
-                            summary: "Vincent wants the Consumer Segmentation report updated with Q3 data and needs approval from Ari before the client presentation tomorrow.",
-                            actionItems: [
-                                "Get Ari's approval",
-                                "Schedule meeting with Product",
-                                "Update Q3 segmentation data",
-                                "Prepare client presentation"
-                            ]
-                        )
-                        
-                        StackableMessageCardView(
-                            platformIcon: "bubble.left.and.bubble.right.fill",
-                            senders: "Team Marketing",
-                            timestamp: "1 hour ago",
-                            urgency: "Medium",
-                            summary: "New campaign assets need review and approval from creative director. Timeline is tight for Friday launch.",
-                            actionItems: [
-                                "Review creative assets",
-                                "Get director approval",
-                                "Schedule launch meeting"
-                            ]
-                        )
-                        
-                        StackableMessageCardView(
-                            platformIcon: "bubble.left.and.bubble.right.fill",
-                            senders: "Sarah Johnson",
-                            timestamp: "2 hours ago",
-                            urgency: "Low",
-                            summary: "Quick sync on quarterly goals and budget planning for next quarter.",
-                            actionItems: [
-                                "Review quarterly metrics",
-                                "Plan budget allocation",
-                                "Schedule team sync"
-                            ]
-                        )
+                        // Show search results when searching
+                        if searchManager.isSearching || !searchManager.searchText.isEmpty {
+                            SearchResultsView(
+                                results: searchManager.searchResults,
+                                isSearching: searchManager.isSearching || !searchManager.searchText.isEmpty,
+                                searchManager: searchManager
+                            )
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
+                        } else {
+                            // Show default message cards when not searching
+                            Group {
+                                StackableMessageCardView(
+                                    platformIcon: "bubble.left.and.bubble.right.fill",
+                                    senders: "Vincent Chase, Eric Murphy",
+                                    timestamp: "20 mins ago",
+                                    urgency: "High",
+                                    summary: "Vincent wants the Consumer Segmentation report updated with Q3 data and needs approval from Ari before the client presentation tomorrow.",
+                                    actionItems: [
+                                        "Get Ari's approval",
+                                        "Schedule meeting with Product",
+                                        "Update Q3 segmentation data",
+                                        "Prepare client presentation"
+                                    ]
+                                )
+                                
+                                StackableMessageCardView(
+                                    platformIcon: "bubble.left.and.bubble.right.fill",
+                                    senders: "Team Marketing",
+                                    timestamp: "1 hour ago",
+                                    urgency: "Medium",
+                                    summary: "New campaign assets need review and approval from creative director. Timeline is tight for Friday launch.",
+                                    actionItems: [
+                                        "Review creative assets",
+                                        "Get director approval",
+                                        "Schedule launch meeting"
+                                    ]
+                                )
+                                
+                                StackableMessageCardView(
+                                    platformIcon: "bubble.left.and.bubble.right.fill",
+                                    senders: "Sarah Johnson",
+                                    timestamp: "2 hours ago",
+                                    urgency: "Low",
+                                    summary: "Quick sync on quarterly goals and budget planning for next quarter.",
+                                    actionItems: [
+                                        "Review quarterly metrics",
+                                        "Plan budget allocation",
+                                        "Schedule team sync"
+                                    ]
+                                )
+                            }
+                            .padding(.horizontal, 20)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
+                        }
                     }
-                    .padding(.horizontal, 20)
                 }
             }
             
@@ -124,6 +150,8 @@ struct DashboardView: View {
         }
         .background(Color.black)
         .preferredColorScheme(.dark)
+        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: searchManager.isSearching)
+        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: searchManager.searchText.isEmpty)
     }
 }
 
